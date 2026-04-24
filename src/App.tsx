@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import './App.css'
 import { 
   ShoppingCart, Home, Grid3X3, Headphones, User, Search, 
@@ -6,12 +6,16 @@ import {
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog'
-import type { BannerSlide, Product } from '@/lib/shop-catalog'
+import type { BannerSlide, Product, ShopCatalog } from '@/lib/shop-catalog'
 import { defaultShopCatalog } from '@/lib/shop-catalog'
+import { loadCatalogWithSheetFallback } from '@/lib/sheet-catalog'
 
-interface CartItem extends Product {
+interface CartLine {
+  id: number
   quantity: number
 }
+
+type CartRow = Product & { quantity: number }
 
 // Banner Carousel Component
 function BannerCarousel({ banners }: { banners: BannerSlide[] }) {
@@ -226,36 +230,48 @@ function CategoryTabs({ activeTab, onTabChange }: { activeTab: string; onTabChan
 function CartDialog({ 
   isOpen, 
   onClose, 
-  cartItems, 
+  cartLines,
+  products,
   onUpdateQuantity,
   onRemove
 }: { 
   isOpen: boolean; 
   onClose: () => void; 
-  cartItems: CartItem[];
+  cartLines: CartLine[];
+  products: Product[];
   onUpdateQuantity: (id: number, delta: number) => void;
   onRemove: (id: number) => void;
 }) {
-  const total = cartItems.reduce((sum, item) => sum + item.price * item.quantity, 0)
+  const cartRows: CartRow[] = useMemo(() => {
+    return cartLines
+      .map((line) => {
+        const p = products.find((x) => x.id === line.id)
+        if (!p) return null
+        return { ...p, quantity: line.quantity }
+      })
+      .filter((row): row is CartRow => row !== null)
+  }, [cartLines, products])
+
+  const total = cartRows.reduce((sum, item) => sum + item.price * item.quantity, 0)
 
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
       <DialogContent className="bg-[#1a1a1a] border-white/10 text-white max-w-md max-h-[80vh] overflow-hidden">
         <DialogHeader>
           <DialogTitle className="text-white flex items-center justify-between">
-            <span>购物车 ({cartItems.length})</span>
+            <span>购物车 ({cartRows.length})</span>
           </DialogTitle>
         </DialogHeader>
         
         <div className="overflow-y-auto max-h-[50vh] space-y-4 pr-2">
-          {cartItems.length === 0 ? (
+          {cartRows.length === 0 ? (
             <div className="text-center py-12">
               <ShoppingCart className="w-16 h-16 mx-auto text-white/20 mb-4" />
               <p className="text-white/50">购物车是空的</p>
               <p className="text-white/30 text-sm mt-1">快去选购心仪的商品吧</p>
             </div>
           ) : (
-            cartItems.map((item) => (
+            cartRows.map((item) => (
               <div key={item.id} className="flex gap-3 bg-[#242424] rounded-lg p-3">
                 <img 
                   src={item.image} 
@@ -297,7 +313,7 @@ function CartDialog({
           )}
         </div>
 
-        {cartItems.length > 0 && (
+        {cartRows.length > 0 && (
           <div className="border-t border-white/10 pt-4 mt-4">
             <div className="flex items-center justify-between mb-4">
               <span className="text-white/60">合计:</span>
@@ -352,16 +368,38 @@ function BottomNav({ activeTab, cartCount }: { activeTab: string; cartCount: num
 
 // Main App
 function App() {
-  const [catalog] = useState(() => structuredClone(defaultShopCatalog))
+  const sheetUrl = import.meta.env.VITE_CATALOG_JSON_URL
+  const [catalog, setCatalog] = useState<ShopCatalog>(() => structuredClone(defaultShopCatalog))
+  const [catalogError, setCatalogError] = useState<string | null>(null)
   const { banners, products } = catalog
-  const [cartItems, setCartItems] = useState<CartItem[]>([])
+  const [cartLines, setCartLines] = useState<CartLine[]>([])
   const [isCartOpen, setIsCartOpen] = useState(false)
   const [activeCategory, setActiveCategory] = useState('all')
 
-  const cartCount = cartItems.reduce((sum, item) => sum + item.quantity, 0)
+  useEffect(() => {
+    let cancelled = false
+    const base = structuredClone(defaultShopCatalog)
+    if (!sheetUrl?.trim()) {
+      return () => {
+        cancelled = true
+      }
+    }
+    loadCatalogWithSheetFallback(base, sheetUrl).then(({ catalog: next, error }) => {
+      if (cancelled) return
+      setCatalog(next)
+      setCatalogError(error ?? null)
+      const ids = new Set(next.products.map((p) => p.id))
+      setCartLines((prev) => prev.filter((line) => ids.has(line.id)))
+    })
+    return () => {
+      cancelled = true
+    }
+  }, [sheetUrl])
+
+  const cartCount = cartLines.reduce((sum, item) => sum + item.quantity, 0)
 
   const handleAddToCart = (product: Product) => {
-    setCartItems(prev => {
+    setCartLines(prev => {
       const existing = prev.find(item => item.id === product.id)
       if (existing) {
         return prev.map(item => 
@@ -370,12 +408,12 @@ function App() {
             : item
         )
       }
-      return [...prev, { ...product, quantity: 1 }]
+      return [...prev, { id: product.id, quantity: 1 }]
     })
   }
 
   const handleUpdateQuantity = (id: number, delta: number) => {
-    setCartItems(prev => prev.map(item => {
+    setCartLines(prev => prev.map(item => {
       if (item.id === id) {
         const newQuantity = Math.max(1, item.quantity + delta)
         return { ...item, quantity: newQuantity }
@@ -385,7 +423,7 @@ function App() {
   }
 
   const handleRemoveFromCart = (id: number) => {
-    setCartItems(prev => prev.filter(item => item.id !== id))
+    setCartLines(prev => prev.filter(item => item.id !== id))
   }
 
   const filteredProducts = activeCategory === 'all' 
@@ -403,6 +441,11 @@ function App() {
 
       {/* Main Content */}
       <main className="pt-14">
+        {catalogError && (
+          <div className="bg-amber-900/40 text-amber-100 text-center text-xs py-2 px-4 border-b border-amber-700/30">
+            {catalogError}
+          </div>
+        )}
         {/* Banner Carousel */}
         <BannerCarousel banners={banners} />
 
@@ -471,7 +514,8 @@ function App() {
       <CartDialog 
         isOpen={isCartOpen} 
         onClose={() => setIsCartOpen(false)}
-        cartItems={cartItems}
+        cartLines={cartLines}
+        products={products}
         onUpdateQuantity={handleUpdateQuantity}
         onRemove={handleRemoveFromCart}
       />
