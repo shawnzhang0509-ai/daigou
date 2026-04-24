@@ -6,115 +6,35 @@ import {
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog'
-
-// Types
-interface Product {
-  id: number
-  name: string
-  price: number
-  originalPrice?: number
-  image: string
-  origin: '新西兰直邮' | '澳洲直邮'
-  currency: 'NZ$' | 'AU$'
-  sold?: number
-}
+import type { BannerSlide, Product } from '@/lib/shop-catalog'
+import { defaultShopCatalog } from '@/lib/shop-catalog'
 
 interface CartItem extends Product {
   quantity: number
 }
 
-// Mock Products Data - matching NZHG style
-const products: Product[] = [
-  {
-    id: 1,
-    name: 'My Organics 意大利无硅 枸杞洗发水 250ml 固发防脱',
-    price: 24.99,
-    image: '/category-care.jpg',
-    origin: '新西兰直邮',
-    currency: 'NZ$',
-    sold: 2341
-  },
-  {
-    id: 2,
-    name: 'Avene 雅漾 Xeracalm A.D霜 400ml【限时特惠】',
-    price: 48.99,
-    originalPrice: 68.99,
-    image: '/category-care.jpg',
-    origin: '新西兰直邮',
-    currency: 'NZ$',
-    sold: 1523
-  },
-  {
-    id: 3,
-    name: 'Moroccanoil摩洛哥 发油 美发护理干枯毛躁 100ml',
-    price: 65.23,
-    image: '/category-care.jpg',
-    origin: '新西兰直邮',
-    currency: 'NZ$',
-    sold: 987
-  },
-  {
-    id: 4,
-    name: 'Bio Revive 加强版解酒片 30粒',
-    price: 36.45,
-    image: '/category-vitamins.jpg',
-    origin: '澳洲直邮',
-    currency: 'AU$',
-    sold: 856
-  },
-  {
-    id: 5,
-    name: 'Blackmores 澳佳宝 天然维生素E软胶囊 1000IU 100粒',
-    price: 42.56,
-    image: '/product-vitaminc.jpg',
-    origin: '澳洲直邮',
-    currency: 'AU$',
-    sold: 3421
-  },
-  {
-    id: 6,
-    name: 'Swisse 斯维诗 胶原蛋白片 100片',
-    price: 26.45,
-    originalPrice: 32.99,
-    image: '/product-collagen.jpg',
-    origin: '澳洲直邮',
-    currency: 'AU$',
-    sold: 2109
-  },
-  {
-    id: 7,
-    name: 'Swisse 斯维诗 高含量蔓越莓 90粒',
-    price: 36.99,
-    image: '/product-grapeseed.jpg',
-    origin: '澳洲直邮',
-    currency: 'AU$',
-    sold: 1876
-  },
-  {
-    id: 8,
-    name: 'A2 Platinum 婴幼儿奶粉 3段 900g',
-    price: 45.99,
-    image: '/product-a2milk.jpg',
-    origin: '新西兰直邮',
-    currency: 'NZ$',
-    sold: 5621
-  },
-]
-
 // Banner Carousel Component
-function BannerCarousel() {
+function BannerCarousel({ banners }: { banners: BannerSlide[] }) {
   const [currentSlide, setCurrentSlide] = useState(0)
-  const banners = [
-    { image: '/banner-1.jpg', alt: '新春特惠' },
-    { image: '/banner-2.jpg', alt: '新西兰直邮' },
-  ]
 
   useEffect(() => {
+    if (banners.length === 0) return
+    const n = banners.length
     const timer = setInterval(() => {
-      setCurrentSlide((prev) => (prev + 1) % banners.length)
+      setCurrentSlide((prev) => (prev + 1) % n)
     }, 5000)
     return () => clearInterval(timer)
-  }, [])
+  }, [banners.length])
+
+  const activeIndex = banners.length === 0 ? 0 : currentSlide % banners.length
+
+  if (banners.length === 0) {
+    return (
+      <div className="relative w-full aspect-[16/9] max-h-[400px] overflow-hidden bg-[#242424] flex items-center justify-center text-white/40 text-sm">
+        暂无轮播图
+      </div>
+    )
+  }
 
   return (
     <div className="relative w-full aspect-[16/9] max-h-[400px] overflow-hidden">
@@ -122,7 +42,7 @@ function BannerCarousel() {
         <div
           key={index}
           className={`absolute inset-0 transition-opacity duration-500 ${
-            index === currentSlide ? 'opacity-100' : 'opacity-0'
+            index === activeIndex ? 'opacity-100' : 'opacity-0'
           }`}
         >
           <img 
@@ -140,7 +60,7 @@ function BannerCarousel() {
             key={index}
             onClick={() => setCurrentSlide(index)}
             className={`w-2 h-2 rounded-full transition-all ${
-              index === currentSlide ? 'bg-white w-6' : 'bg-white/50'
+              index === activeIndex ? 'bg-white w-6' : 'bg-white/50'
             }`}
           />
         ))}
@@ -432,6 +352,8 @@ function BottomNav({ activeTab, cartCount }: { activeTab: string; cartCount: num
 
 // Main App
 function App() {
+  const [catalog] = useState(() => structuredClone(defaultShopCatalog))
+  const { banners, products } = catalog
   const [cartItems, setCartItems] = useState<CartItem[]>([])
   const [isCartOpen, setIsCartOpen] = useState(false)
   const [activeCategory, setActiveCategory] = useState('all')
@@ -482,7 +404,7 @@ function App() {
       {/* Main Content */}
       <main className="pt-14">
         {/* Banner Carousel */}
-        <BannerCarousel />
+        <BannerCarousel banners={banners} />
 
         {/* Category Tabs */}
         <CategoryTabs activeTab={activeCategory} onTabChange={setActiveCategory} />
