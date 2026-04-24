@@ -400,13 +400,15 @@ function App() {
   const [catalogHint, setCatalogHint] = useState<string | null>(null)
   const [mergeStats, setMergeStats] = useState<CatalogMergeStats | null>(null)
   const [lastLoadedSheetUrl, setLastLoadedSheetUrl] = useState<string | null>(null)
+  const [catalogFetchTick, setCatalogFetchTick] = useState(0)
   const { banners, products } = catalog
   const [cartLines, setCartLines] = useState<CartLine[]>([])
   const [isCartOpen, setIsCartOpen] = useState(false)
   const [activeCategory, setActiveCategory] = useState('all')
 
+  /** null 表示尚未完成本轮请求（含首次与点击「重新加载」后） */
   const sheetLoading = Boolean(sheetUrl) && lastLoadedSheetUrl !== sheetUrl
-  const sheetLoadDone = Boolean(sheetUrl) && lastLoadedSheetUrl === sheetUrl && !sheetLoading
+  const sheetLoadDone = Boolean(sheetUrl) && lastLoadedSheetUrl === sheetUrl
 
   useEffect(() => {
     if (!sheetUrl) return
@@ -425,7 +427,13 @@ function App() {
     return () => {
       cancelled = true
     }
-  }, [sheetUrl])
+  }, [sheetUrl, catalogFetchTick])
+
+  const handleRefreshCatalog = () => {
+    if (!sheetUrl) return
+    setLastLoadedSheetUrl(null)
+    setCatalogFetchTick((n) => n + 1)
+  }
 
   const cartCount = cartLines.reduce((sum, item) => sum + item.quantity, 0)
 
@@ -479,8 +487,19 @@ function App() {
           </div>
         )}
         {sheetUrl && sheetLoading && (
-          <div className="bg-sky-900/30 text-sky-100 text-center text-xs py-2 px-4 border-b border-sky-800/30">
-            正在从表格同步目录…
+          <div className="bg-sky-900/30 text-sky-100 text-center text-xs py-2 px-4 border-b border-sky-800/30 flex flex-wrap items-center justify-center gap-2">
+            <span>正在从表格同步目录…</span>
+          </div>
+        )}
+        {sheetUrl && !sheetLoading && (
+          <div className="flex justify-center py-1 border-b border-white/5">
+            <button
+              type="button"
+              onClick={handleRefreshCatalog}
+              className="text-[11px] text-sky-300/90 hover:text-sky-200 underline underline-offset-2"
+            >
+              重新从表格加载
+            </button>
           </div>
         )}
         {catalogError && (

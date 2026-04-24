@@ -181,6 +181,14 @@ export async function loadCatalogWithSheetFallback(
     return { catalog, stats }
   } catch (e) {
     console.error('[catalog]', e)
-    return { catalog: base, error: '目录加载失败，已显示本地数据' }
+    const msg = e instanceof Error ? e.message : String(e)
+    let hint = '目录加载失败，已显示本地数据。'
+    if (/failed to fetch|networkerror|load failed|network request failed/i.test(msg)) {
+      hint +=
+        ' 常见原因：① 网站打包时未带上 VITE_CATALOG_JSON_URL（Vercel 要配变量并 Redeploy）；② 浏览器拦截跨域（F12→Console/Network 查看）；③ 脚本部署权限不是「任何人」。'
+    } else {
+      hint += ` 详情：${msg}`
+    }
+    return { catalog: base, error: hint }
   }
 }
