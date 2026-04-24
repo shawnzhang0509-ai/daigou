@@ -381,6 +381,17 @@ function catalogHintFromStats(stats: CatalogMergeStats | undefined, hasError: bo
   return null
 }
 
+function catalogSuccessLine(stats: CatalogMergeStats): string {
+  const parts: string[] = []
+  if (stats.mergedBannerSlides > 0) parts.push(`轮播 ${stats.mergedBannerSlides} 帧`)
+  if (stats.patchedProductIds > 0) parts.push(`已合并 ${stats.patchedProductIds} 条商品`)
+  if (stats.extraProducts > 0) parts.push(`新增 ${stats.extraProducts} 个商品`)
+  if (parts.length === 0) {
+    return '已连接表格且接口有数据，但当前合并结果与内置示例相同（可在表格里改 id 为 1 的商品价格做测试）。'
+  }
+  return `已从 Google 表格同步：${parts.join('；')}。`
+}
+
 // Main App
 function App() {
   const sheetUrl = import.meta.env.VITE_CATALOG_JSON_URL?.trim()
@@ -395,6 +406,7 @@ function App() {
   const [activeCategory, setActiveCategory] = useState('all')
 
   const sheetLoading = Boolean(sheetUrl) && lastLoadedSheetUrl !== sheetUrl
+  const sheetLoadDone = Boolean(sheetUrl) && lastLoadedSheetUrl === sheetUrl && !sheetLoading
 
   useEffect(() => {
     if (!sheetUrl) return
@@ -460,6 +472,12 @@ function App() {
 
       {/* Main Content */}
       <main className="pt-14">
+        {!sheetUrl && (
+          <div className="bg-slate-700/50 text-slate-200 text-center text-xs py-2 px-3 border-b border-white/10 leading-relaxed">
+            当前为<strong className="text-white">内置示例数据</strong>（未检测到 VITE_CATALOG_JSON_URL）。若已在 Vercel 填写过该变量，请确认变量名拼写无误并<strong className="text-white"> Redeploy </strong>
+            一次，否则构建里不会带上表格地址。
+          </div>
+        )}
         {sheetUrl && sheetLoading && (
           <div className="bg-sky-900/30 text-sky-100 text-center text-xs py-2 px-4 border-b border-sky-800/30">
             正在从表格同步目录…
@@ -473,6 +491,11 @@ function App() {
         {catalogHint && (
           <div className="bg-amber-900/35 text-amber-50 text-center text-xs py-2 px-4 border-b border-amber-700/25 leading-relaxed">
             {catalogHint}
+          </div>
+        )}
+        {sheetLoadDone && !catalogError && !catalogHint && mergeStats && (
+          <div className="bg-emerald-900/35 text-emerald-100 text-center text-xs py-2 px-4 border-b border-emerald-700/30 leading-relaxed">
+            {catalogSuccessLine(mergeStats)}
           </div>
         )}
         {import.meta.env.DEV && sheetUrl && mergeStats && !catalogError && (
