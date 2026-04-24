@@ -8,7 +8,17 @@
    `VITE_CATALOG_JSON_URL=https://script.google.com/macros/s/你的部署ID/exec`  
    保存后执行 **`npm run dev`**，浏览器强制刷新。
 4. **本地打包预览**：同上变量可写在 **`.env.production.local`**，再执行 **`npm run build`** 与 **`npm run preview`**。
-5. **线上网站（GitHub Pages / Vercel 等）**：在托管平台的 **Environment variables / Secrets** 里添加同名变量 `VITE_CATALOG_JSON_URL`，值为你的 Web 应用 URL，然后 **重新触发一次构建部署**。仅在自己电脑配置不会更新线上。
+5. **Vercel 线上部署**（按顺序点即可）：
+   1. 打开 [vercel.com](https://vercel.com) 并登录，进入你的 **Project**（对应这个 Git 仓库的网站）。
+   2. 顶部 **Settings** → 左侧 **Environment Variables**。
+   3. 点 **Add New**：
+      - **Key**：`VITE_CATALOG_JSON_URL`（必须完全一致，含前缀 `VITE_`）。
+      - **Value**：粘贴你的 Apps Script Web 应用完整地址（`https://script.google.com/macros/s/.../exec`）。
+      - **Environments**：至少勾选 **Production**；若你有 Preview 分支预览，也可一并勾选 **Preview**。
+   4. 保存后，打开 **Deployments** 页，对最新一条 deployment 点右侧 **⋯** → **Redeploy**（或随便推一个空 commit 触发新构建）。**Vite 只在构建时读环境变量**，不设变量或不重部署，线上会一直用内置默认数据。
+   5. 部署完成后打开你的 `.vercel.app` 域名，**强制刷新**（Ctrl+Shift+R）或无痕窗口验证。
+
+其他平台同理：在后台配置同名构建时变量后重新 build。
 
 更多细节见 `.env.example` 与 `scripts/google-apps-script-catalog/Code.gs`。
 
