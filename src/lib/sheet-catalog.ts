@@ -25,7 +25,7 @@ function str(v: unknown): string {
 function parseProductRow(row: unknown): Partial<Product> & { id?: number } | null {
   if (!row || typeof row !== 'object') return null
   const o = row as Record<string, unknown>
-  const id = num(o.id ?? o.ID)
+  const id = num(o.id ?? o.ID ?? o['编号'])
   if (id === undefined || id <= 0) return null
   const patch: Partial<Product> & { id: number } = { id }
   const name = str(o.name ?? o.Name)
@@ -91,10 +91,34 @@ export async function fetchCatalogFromUrl(url: string): Promise<RemoteCatalogPay
   }
 }
 
+export type CatalogMergeStats = {
+  /** 接口里 banners 数组长度 */
+  remoteBannerRows: number
+  /** 接口里 products 数组长度 */
+  remoteProductRows: number
+  /** 实际用于轮播的条数（0 表示仍用本地轮播） */
+  mergedBannerSlides: number
+  /** 合并进目录的商品 id 数量（含仅改价、改图） */
+  patchedProductIds: number
+  /** 表格里新增、并挂到列表末尾的商品数 */
+  extraProducts: number
+}
+
 /**
  * 用表格数据覆盖首页目录：有有效轮播则用表格轮播；商品按 id 合并到默认列表（顺序与 id 以代码为准）。
  */
-export function mergeRemoteCatalog(base: ShopCatalog, remote: RemoteCatalogPayload): ShopCatalog {
+export function mergeRemoteCatalog(
+  base: ShopCatalog,
+  remote: RemoteCatalogPayload
+): { catalog: ShopCatalog; stats: CatalogMergeStats } {
+  const stats: CatalogMergeStats = {
+    remoteBannerRows: remote.banners?.length ?? 0,
+    remoteProductRows: remote.products?.length ?? 0,
+    mergedBannerSlides: 0,
+    patchedProductIds: 0,
+    extraProducts: 0,
+  }
+
   let banners = base.banners
   if (remote.banners && remote.banners.length > 0) {
     const parsed = remote.banners
@@ -102,7 +126,10 @@ export function mergeRemoteCatalog(base: ShopCatalog, remote: RemoteCatalogPaylo
       .filter((b): b is NonNullable<typeof b> => b !== null)
       .sort((a, b) => (a._order ?? 0) - (b._order ?? 0))
       .map(({ image, alt }) => ({ image, alt }))
-    if (parsed.length > 0) banners = parsed
+    if (parsed.length > 0) {
+      banners = parsed
+      stats.mergedBannerSlides = parsed.length
+    }
   }
 
   const patches = new Map<number, Partial<Product> & { id: number }>()
@@ -123,6 +150,8 @@ export function mergeRemoteCatalog(base: ShopCatalog, remote: RemoteCatalogPaylo
         extras.push({ ...patch })
       }
     }
+    stats.patchedProductIds = patches.size
+    stats.extraProducts = extras.length
   }
 
   const products = [
@@ -134,18 +163,22 @@ export function mergeRemoteCatalog(base: ShopCatalog, remote: RemoteCatalogPaylo
     ...extras.sort((a, b) => a.id - b.id),
   ]
 
-  return { banners, products }
+  return { catalog: { banners, products }, stats }
 }
 
 export async function loadCatalogWithSheetFallback(
   base: ShopCatalog,
   url: string | undefined
-): Promise<{ catalog: ShopCatalog; error?: string }> {
+): Promise<{ catalog: ShopCatalog; error?: string; stats?: CatalogMergeStats }> {
   const trimmed = url?.trim()
   if (!trimmed) return { catalog: base }
   try {
     const remote = await fetchCatalogFromUrl(trimmed)
-    return { catalog: mergeRemoteCatalog(base, remote) }
+    const { catalog, stats } = mergeRemoteCatalog(base, remote)
+    if (import.meta.env.DEV) {
+      console.info('[catalog] remote loaded', stats)
+    }
+    return { catalog, stats }
   } catch (e) {
     console.error('[catalog]', e)
     return { catalog: base, error: '目录加载失败，已显示本地数据' }

@@ -8,7 +8,7 @@ import { Button } from '@/components/ui/button'
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import type { BannerSlide, Product, ShopCatalog } from '@/lib/shop-catalog'
 import { defaultShopCatalog } from '@/lib/shop-catalog'
-import { loadCatalogWithSheetFallback } from '@/lib/sheet-catalog'
+import { loadCatalogWithSheetFallback, type CatalogMergeStats } from '@/lib/sheet-catalog'
 
 interface CartLine {
   id: number
@@ -366,30 +366,49 @@ function BottomNav({ activeTab, cartCount }: { activeTab: string; cartCount: num
   )
 }
 
+function catalogHintFromStats(stats: CatalogMergeStats | undefined, hasError: boolean): string | null {
+  if (!stats || hasError) return null
+  const { remoteBannerRows, remoteProductRows, mergedBannerSlides, patchedProductIds } = stats
+  if (remoteBannerRows === 0 && remoteProductRows === 0) {
+    return '表格接口返回的 banners / products 为空。请确认 Apps 脚本已绑定当前表格，且工作表名称恰好为「Banners」「Products」（区分大小写），且表内有数据行。'
+  }
+  if (remoteProductRows > 0 && patchedProductIds === 0) {
+    return '接口里有商品行，但没有合并进网站：请确认第一列表头为 id 或 编号，且数值与网站商品 id（1–8）一致；origin 须为「新西兰直邮」或「澳洲直邮」，currency 须为「NZ$」或「AU$」。'
+  }
+  if (remoteBannerRows > 0 && mergedBannerSlides === 0) {
+    return '接口里有轮播行，但未使用：请确认 Banners 表有 image 列且图片 URL 非空；active 列勿填 false / 否。'
+  }
+  return null
+}
+
 // Main App
 function App() {
-  const sheetUrl = import.meta.env.VITE_CATALOG_JSON_URL
+  const sheetUrl = import.meta.env.VITE_CATALOG_JSON_URL?.trim()
   const [catalog, setCatalog] = useState<ShopCatalog>(() => structuredClone(defaultShopCatalog))
   const [catalogError, setCatalogError] = useState<string | null>(null)
+  const [catalogHint, setCatalogHint] = useState<string | null>(null)
+  const [mergeStats, setMergeStats] = useState<CatalogMergeStats | null>(null)
+  const [lastLoadedSheetUrl, setLastLoadedSheetUrl] = useState<string | null>(null)
   const { banners, products } = catalog
   const [cartLines, setCartLines] = useState<CartLine[]>([])
   const [isCartOpen, setIsCartOpen] = useState(false)
   const [activeCategory, setActiveCategory] = useState('all')
 
+  const sheetLoading = Boolean(sheetUrl) && lastLoadedSheetUrl !== sheetUrl
+
   useEffect(() => {
+    if (!sheetUrl) return
     let cancelled = false
     const base = structuredClone(defaultShopCatalog)
-    if (!sheetUrl?.trim()) {
-      return () => {
-        cancelled = true
-      }
-    }
-    loadCatalogWithSheetFallback(base, sheetUrl).then(({ catalog: next, error }) => {
+    loadCatalogWithSheetFallback(base, sheetUrl).then(({ catalog: next, error, stats }) => {
       if (cancelled) return
       setCatalog(next)
       setCatalogError(error ?? null)
+      setMergeStats(stats ?? null)
+      setCatalogHint(catalogHintFromStats(stats, Boolean(error)))
       const ids = new Set(next.products.map((p) => p.id))
       setCartLines((prev) => prev.filter((line) => ids.has(line.id)))
+      setLastLoadedSheetUrl(sheetUrl)
     })
     return () => {
       cancelled = true
@@ -441,9 +460,26 @@ function App() {
 
       {/* Main Content */}
       <main className="pt-14">
+        {sheetUrl && sheetLoading && (
+          <div className="bg-sky-900/30 text-sky-100 text-center text-xs py-2 px-4 border-b border-sky-800/30">
+            正在从表格同步目录…
+          </div>
+        )}
         {catalogError && (
           <div className="bg-amber-900/40 text-amber-100 text-center text-xs py-2 px-4 border-b border-amber-700/30">
             {catalogError}
+          </div>
+        )}
+        {catalogHint && (
+          <div className="bg-amber-900/35 text-amber-50 text-center text-xs py-2 px-4 border-b border-amber-700/25 leading-relaxed">
+            {catalogHint}
+          </div>
+        )}
+        {import.meta.env.DEV && sheetUrl && mergeStats && !catalogError && (
+          <div className="bg-white/5 text-white/50 text-center text-[11px] py-1.5 px-3 font-mono border-b border-white/5">
+            [catalog] banners行={mergeStats.remoteBannerRows} 使用轮播={mergeStats.mergedBannerSlides} ·
+            products行={mergeStats.remoteProductRows} 合并id数={mergeStats.patchedProductIds} 新增商品=
+            {mergeStats.extraProducts}
           </div>
         )}
         {/* Banner Carousel */}
