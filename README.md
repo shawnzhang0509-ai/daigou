@@ -1,3 +1,19 @@
+# 澳新康源（Vite + React）
+
+## 用 Google 表格当「后台」
+
+1. 表格里两个工作表名须为 **`Banners`**、**`Products`**，表头与 `scripts/google-apps-script-catalog/Code.gs` 顶部说明一致。
+2. 把 Apps Script **Web 应用** 的地址填进环境变量 **`VITE_CATALOG_JSON_URL`**（不要提交到 Git）。
+3. **本地开发**：在项目根目录新建 **`.env.local`**（已加入 `.gitignore`），写入一行  
+   `VITE_CATALOG_JSON_URL=https://script.google.com/macros/s/你的部署ID/exec`  
+   保存后执行 **`npm run dev`**，浏览器强制刷新。
+4. **本地打包预览**：同上变量可写在 **`.env.production.local`**，再执行 **`npm run build`** 与 **`npm run preview`**。
+5. **线上网站（GitHub Pages / Vercel 等）**：在托管平台的 **Environment variables / Secrets** 里添加同名变量 `VITE_CATALOG_JSON_URL`，值为你的 Web 应用 URL，然后 **重新触发一次构建部署**。仅在自己电脑配置不会更新线上。
+
+更多细节见 `.env.example` 与 `scripts/google-apps-script-catalog/Code.gs`。
+
+---
+
 # React + TypeScript + Vite
 
 This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
